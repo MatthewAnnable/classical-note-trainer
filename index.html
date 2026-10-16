@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Classical Note Trainer</title>
+<style>
+  :root { --bg:#faf7f2; --ink:#1d1b19; --mute:#7a746b; --card:#fff; --line:#e4ddd0; --ok:#2e8b57; --accent:#8a4b1f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#181614; --ink:#f0ebe3; --mute:#9c958a; --card:#23201d; --line:#3a352f; --ok:#4cc38a; --accent:#e0a064; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:20px 16px 40px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--mute); font-size:14px; margin:0 0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  svg { width:100%; height:auto; display:block; }
+  .staff line { stroke:var(--ink); stroke-width:1.4; }
+  .note { fill:var(--ink); transition:fill .15s; }
+  .note.good { fill:var(--ok); }
+  .clef { fill:var(--ink); font-family:"Noto Music","Apple Symbols","Segoe UI Symbol","Bravura Text",serif; }
+  button { font:inherit; font-weight:600; padding:12px 20px; border-radius:10px; border:0; background:var(--accent); color:#fff; cursor:pointer; }
+  button.alt { background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:500; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .big { font-size:30px; font-weight:700; min-width:3ch; }
+  .meter { height:10px; background:var(--line); border-radius:6px; overflow:hidden; flex:1; min-width:120px; }
+  .meter > div { height:100%; width:0; background:var(--accent); transition:width .05s; }
+  .meter .gate { background:none; }
+  .stat { color:var(--mute); font-size:14px; }
+  label { font-size:14px; color:var(--mute); }
+  input[type=range] { width:100%; }
+  .heard { font-size:15px; color:var(--mute); min-height:1.4em; }
+  #msg { color:var(--accent); font-size:14px; min-height:1.4em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Classical Note Trainer</h1>
+  <p class="sub">Play the note shown, on your guitar. Open G string up to the 3rd fret on the top E string. Written an octave above where it sounds, as classical guitar music is.</p>
+
+  <div class="card">
+    <svg id="staff" viewBox="0 0 400 190" aria-label="Treble clef with a note to play"></svg>
+    <div class="row" style="justify-content:space-between;margin-top:6px">
+      <span class="big" id="name">&nbsp;</span>
+      <span class="stat">Score <b id="score">0</b> &middot; streak <b id="streak">0</b></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:12px">
+      <button id="start">Start listening</button>
+      <button id="skip" class="alt">Skip note</button>
+    </div>
+    <div id="msg">Press Start and allow the microphone.</div>
+    <div class="row" style="margin:10px 0 4px">
+      <span class="stat" style="width:70px">Volume</span>
+      <div class="meter"><div id="level"></div></div>
+    </div>
+    <label for="gate">Sensitivity (move right if it isn't hearing you)</label>
+    <input id="gate" type="range" min="0" max="100" value="70">
+    <div class="heard" id="heard">Heard: &ndash;</div>
+    <label style="display:block;margin-top:8px"><input id="anyoct" type="checkbox"> Accept the right note in any octave (for testing)</label>
+  </div>
+</main>
+
+<script>
+// ---------- Notes ----------
+// Sounding range: open G string (G3) up to 3rd fret on the high E string (G4).
+// Classical guitar is written an octave above it sounds, so the staff shows G4..G5.
+const LETTERS = ['C','D','E','F','G','A','B'];
+const SEMI = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const TARGETS = [];
+(function () {
+  let letter = 4, oct = 3;                 // G3
+  for (;;) {
+    const L = LETTERS[letter];
+    TARGETS.push({
+      letter: L,
+      soundOct: oct,
+      writtenOct: oct + 1,
+      midi: 12 * (oct + 1) + SEMI[L],      // sounding pitch (C4 = 60)
+    });
+    if (L === 'G' && oct === 4) break;
+    letter++; if (letter > 6) { letter = 0; oct++; }
+  }
+})();
+const midiToHz = m => 440 * Math.pow(2, (m - 69) / 12);
+const NAMES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const hzToMidi = f => 69 + 12 * Math.log2(f / 440);
+
+// ---------- Staff drawing ----------
+const svg = document.getElementById('staff');
+const NS = 'http://www.w3.org/2000/svg';
+const TOP = 50, GAP = 18;                  // top line y, spacing between lines
+const STEP = GAP / 2;
+const el = (n, a, t) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (t) e.textContent = t; return e; };
+
+function drawStaff() {
+  svg.innerHTML = '';
+  const g = el('g', { class: 'staff' });
+  for (let i = 0; i < 5; i++) g.appendChild(el('line', { x1: 20, x2: 380, y1: TOP + i * GAP, y2: TOP + i * GAP }));
+  svg.appendChild(g);
+  // treble clef, with the small 8 beneath that marks the classical guitar octave
+  svg.appendChild(el('text', { class: 'clef', x: 24, y: TOP + 4 * GAP + 16, 'font-size': 112 }, '\u{1D11E}'));
+  svg.appendChild(el('text', { class: 'clef', x: 48, y: TOP + 4 * GAP + 42, 'font-size': 18, 'font-family': 'serif', 'font-weight': 700, 'text-anchor': 'middle' }, '8'));
+}
+// y of a written note: bottom line is E4
+const stepsFromC = (L, o) => o * 7 + LETTERS.indexOf(L);
+const BOTTOM = stepsFromC('E', 4);
+const noteY = (L, o) => TOP + 4 * GAP - (stepsFromC(L, o) - BOTTOM) * STEP;
+
+let noteEl = null;
+function drawNote(t) {
+  if (noteEl) noteEl.remove();
+  const y = noteY(t.letter, t.writtenOct);
+  const g = el('g', {});
+  g.appendChild(el('ellipse', { class: 'note', cx: 250, cy: y, rx: 12, ry: 8.5, transform: `rotate(-20 250 ${y})` }));
+  // stem: up if on/below the middle line, down above it
+  const up = y >= TOP + 2 * GAP;
+  g.appendChild(el('rect', up ? { class: 'note', x: 260.5, y: y - 56, width: 2, height: 56 }
+                              : { class: 'note', x: 237.5, y: y, width: 2, height: 56 }));
+  svg.appendChild(g);
+  noteEl = g;
+}
+
+// ---------- Game state ----------
+let current = null, score = 0, streak = 0, last = -1, matched = 0, advancing = false;
+const $ = id => document.getElementById(id);
+function nextNote() {
+  let i; do { i = Math.floor(Math.random() * TARGETS.length); } while (i === last);
+  last = i; current = TARGETS[i]; matched = 0; advancing = false;
+  drawNote(current);
+  $('name').innerHTML = '&nbsp;';
+}
+function success() {
+  advancing = true; score++; streak++;
+  $('score').textContent = score; $('streak').textContent = streak;
+  noteEl.querySelectorAll('.note').forEach(n => n.classList.add('good'));
+  $('name').textContent = current.letter + ' ✓';
+  setTimeout(nextNote, 900);
+}
+$('skip').onclick = () => { streak = 0; $('streak').textContent = 0; nextNote(); };
+
+// ---------- Pitch detection (McLeod normalised square difference) ----------
+// PITCH-START
+function detectPitch(buf, sr) {
+  const n = buf.length, maxTau = Math.min(n >> 1, Math.floor(sr / 70)), minTau = Math.floor(sr / 700);
+  const nsdf = new Float32Array(maxTau);
+  // running sum of squares for the m' term
+  let sq = 0; for (let i = 0; i < n; i++) sq += buf[i] * buf[i];
+  let m = 2 * sq;
+  for (let tau = 0; tau < maxTau; tau++) {
+    let acf = 0;
+    for (let i = 0; i < n - tau; i++) acf += buf[i] * buf[i + tau];
+    nsdf[tau] = m > 0 ? 2 * acf / m : 0;
+    m -= buf[tau] * buf[tau] + buf[n - 1 - tau] * buf[n - 1 - tau];
+  }
+  // peaks: one per positive lobe
+  const peaks = [];
+  let tau = 1;
+  while (tau < maxTau - 1 && nsdf[tau] > 0) tau++;           // skip first lobe
+  while (tau < maxTau - 1) {
+    while (tau < maxTau - 1 && nsdf[tau] <= 0) tau++;
+    let best = -1;
+    while (tau < maxTau - 1 && nsdf[tau] > 0) {
+      if (best < 0 || nsdf[tau] > nsdf[best]) best = tau;
+      tau++;
+    }
+    if (best > 0 && best >= minTau && nsdf[best] > nsdf[best - 1] && nsdf[best] >= nsdf[best + 1]) peaks.push(best);
+  }
+  if (!peaks.length) return null;
+  let maxVal = 0; for (const p of peaks) maxVal = Math.max(maxVal, nsdf[p]);
+  const pick = peaks.find(p => nsdf[p] >= 0.9 * maxVal);
+  const a = nsdf[pick - 1], b = nsdf[pick], c = nsdf[pick + 1];
+  const shift = (a - c) / (2 * (a - 2 * b + c) || 1);
+  return { freq: sr / (pick + shift), clarity: b };
+}
+// PITCH-END
+
+// ---------- Microphone loop ----------
+let ctx, analyser, buf, running = false, lastRun = 0;
+$('start').onclick = async () => {
+  if (running) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    $('msg').textContent = 'This browser can\'t reach the microphone from here. Try Chrome or Safari, and open the page from its web address.';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true }
+    });
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    const src = ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser(); analyser.fftSize = 4096;
+    src.connect(analyser);
+    buf = new Float32Array(analyser.fftSize);
+    running = true;
+    $('start').textContent = 'Listening…'; $('start').disabled = true;
+    $('msg').textContent = 'Play the note shown.';
+    nextNote();
+    requestAnimationFrame(loop);
+  } catch (e) {
+    $('msg').textContent = 'Couldn\'t use the microphone: ' + (e.message || e.name) + '. Allow it in the browser and try again.';
+  }
+};
+
+function loop(t) {
+  if (!running) return;
+  requestAnimationFrame(loop);
+  if (t - lastRun < 50) return;
+  lastRun = t;
+  analyser.getFloatTimeDomainData(buf);
+  let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+  const rms = Math.sqrt(s / buf.length);
+  $('level').style.width = Math.min(100, Math.sqrt(rms) * 220) + '%';
+  // Sensitivity 0..100 -> gate from loud (0.02) to very quiet (0.0007)
+  const gate = 0.02 * Math.pow(0.035, $('gate').value / 100);
+  if (rms < gate) { matched = 0; $('heard').textContent = 'Heard: – (too quiet; try Sensitivity to the right)'; return; }
+  const r = detectPitch(buf, ctx.sampleRate);
+  if (!r || r.clarity < 0.8 || r.freq < 150 || r.freq > 700) { matched = 0; $('heard').textContent = 'Heard: sound, but no clear note'; return; }
+  const midi = hzToMidi(r.freq), rounded = Math.round(midi);
+  $('heard').textContent = `Heard: ${NAMES[((rounded % 12) + 12) % 12]}${Math.floor(rounded / 12) - 1}  (${r.freq.toFixed(1)} Hz)`;
+  if (advancing || !current) return;
+  let diff = midi - current.midi;
+  if ($('anyoct').checked) diff = ((diff % 12) + 18) % 12 - 6;
+  if (Math.abs(diff) < 0.5) { if (++matched >= 3) success(); } else matched = 0;
+}
+
+drawStaff();
+current = TARGETS[0]; drawNote(TARGETS[Math.floor(Math.random() * TARGETS.length)]);
+</script>
+</body>
+</html>
