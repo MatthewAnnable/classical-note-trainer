@@ -139,7 +139,7 @@
   <div class="card mode" id="m-ladder" hidden>
     <p class="stat" style="margin-top:0">Play each note within 4 beats. Every note you get speeds the metronome up by 2 bpm, starting at 65. How high can you climb?</p>
     <div class="row between">
-      <div><span class="huge" id="lBpm">80</span> <span class="stat">bpm</span></div>
+      <div><span class="huge" id="lBpm">65</span> <span class="stat">bpm</span></div>
       <div class="dots" id="lDots"><span></span><span></span><span></span><span class="last"></span></div>
     </div>
     <div class="row between" style="margin-top:10px">
@@ -584,7 +584,7 @@ function timedFinish() {
   $('tProg').textContent = `${timed.seq.length} / ${timed.seq.length}`;
 }
 
-// Tempo Ladder: each note within 4 beats; +2 bpm per note from 80
+// Tempo Ladder: each note within 4 beats; +2 bpm per note from 65
 const LADDER_START = 65, LADDER_STEP = 2, BEATS = 4;
 const GRACE = 0.25;   // s: the pitch detector needs ~150-250ms to be sure of a note
 const ladder = { running: false, bpm: LADDER_START, score: 0, next: 0, queue: [], countIn: 0, pendingStart: false, t0: 0, interval: 0, beat: 0, timer: null };
