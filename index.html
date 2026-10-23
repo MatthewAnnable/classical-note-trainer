@@ -130,14 +130,14 @@
       </div>
     </div>
     <div class="row between" style="margin-top:10px">
-      <button id="tStart">Start run</button>
+      <button id="tStart">Begin</button>
       <span class="stat">Best time: <b id="tBest">–</b></span>
     </div>
   </div>
 
   <!-- Tempo Ladder -->
   <div class="card mode" id="m-ladder" hidden>
-    <p class="stat" style="margin-top:0">Play each note within 4 beats. Every note you get speeds the metronome up by 2 bpm, starting at 80. How high can you climb?</p>
+    <p class="stat" style="margin-top:0">Play each note within 4 beats. Every note you get speeds the metronome up by 2 bpm, starting at 65. How high can you climb?</p>
     <div class="row between">
       <div><span class="huge" id="lBpm">80</span> <span class="stat">bpm</span></div>
       <div class="dots" id="lDots"><span></span><span></span><span></span><span class="last"></span></div>
@@ -455,7 +455,7 @@ async function ensureMic() {
 function loop(t) {
   requestAnimationFrame(loop);
   if (ladder.running) ladderTick();
-  if (timed.running) $('tTime').textContent = fmt(timedElapsed());
+  if (timed.running) timedTick();
   if (t - lastRun < 50) return;
   lastRun = t;
   analyser.getFloatTimeDomainData(buf);
@@ -475,7 +475,7 @@ function loop(t) {
 // ---------- Modes ----------
 function stopAll() {
   if (ladder.running) ladderStop();
-  timed.running = false; $('tStart').textContent = 'Start run';
+  timed.running = false; $('tStart').textContent = 'Begin';
   $('pStart').textContent = 'Start';
   game = null;
 }
@@ -522,7 +522,7 @@ $('pSkip').onclick = () => {
 };
 
 // Timed levels: play every note of the run as fast as you can, +5s per wrong note
-const timed = { running: false, t0: 0, pen: 0, i: 0, seq: [] };
+const timed = { running: false, t0: 0, pen: 0, i: 0, seq: [], countEnd: 0, countFrom: 0, beat: 1 };
 const timedElapsed = () => (performance.now() - timed.t0) / 1000 + timed.pen * 5;
 $('tStart').onclick = async () => {
   if (timed.running) { stopAll(); fb('Run stopped.'); showNote(null); return; }
@@ -531,11 +531,16 @@ $('tStart').onclick = async () => {
   stopAll();
   const l = level();
   timed.seq = []; for (let i = 0; i < l.count; i++) timed.seq.push(pickNext(ids, timed.seq[i - 1]));
-  timed.i = 0; timed.pen = 0; timed.t0 = performance.now(); timed.running = true;
+  timed.i = 0; timed.pen = 0; timed.running = true;
   $('tStart').textContent = 'Stop'; $('tPen').textContent = 0; $('tProg').textContent = `1 / ${l.count}`;
-  fb('Go!', '', 800);
+  $('tTime').textContent = fmt(0);
+  // 4-beat count-in at the Tempo Ladder's starting tempo; the clock starts after it
+  timed.beat = 60 / LADDER_START; timed.countFrom = actx.currentTime + 0.2;
+  timed.countEnd = timed.countFrom + 4 * timed.beat;
+  for (let i = 0; i < 4; i++) click(timed.countFrom + i * timed.beat, false);
+  showNote(null);
   game = {
-    target: BY_ID[timed.seq[0]], active: true,
+    target: BY_ID[timed.seq[0]], active: false,
     onCorrect() {
       timed.i++;
       if (timed.i >= timed.seq.length) return timedFinish();
@@ -549,12 +554,24 @@ $('tStart').onclick = async () => {
       flashNote('bad', 500); fb(`✗ that was ${pcName(m)} · +5s`, 'bad', 1200);
     },
   };
-  showNote(game.target);
 };
+function timedTick() {
+  if (timed.countEnd) {
+    const now = actx.currentTime;
+    if (now < timed.countEnd) {
+      const n = Math.floor((now - timed.countFrom) / timed.beat) + 1;
+      if (n >= 1) fb(n < 4 ? `Get ready… ${n}` : 'Go!');
+      return;
+    }
+    timed.countEnd = 0; timed.t0 = performance.now();
+    game.active = true; showNote(game.target); fb('Go!', '', 600);
+  }
+  $('tTime').textContent = fmt(timedElapsed());
+}
 function timedFinish() {
   const total = timedElapsed();
   const id = level().id;
-  timed.running = false; game = null; $('tStart').textContent = 'Start run';
+  timed.running = false; game = null; $('tStart').textContent = 'Begin';
   $('tTime').textContent = fmt(total);
   showNote(null);
   const old = store.best[id];
@@ -568,7 +585,7 @@ function timedFinish() {
 }
 
 // Tempo Ladder: each note within 4 beats; +2 bpm per note from 80
-const LADDER_START = 80, LADDER_STEP = 2, BEATS = 4;
+const LADDER_START = 65, LADDER_STEP = 2, BEATS = 4;
 const GRACE = 0.25;   // s: the pitch detector needs ~150-250ms to be sure of a note
 const ladder = { running: false, bpm: LADDER_START, score: 0, next: 0, queue: [], countIn: 0, pendingStart: false, t0: 0, interval: 0, beat: 0, timer: null };
 function click(time, accent) {
