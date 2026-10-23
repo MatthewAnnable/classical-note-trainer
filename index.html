@@ -5,149 +5,368 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Classical Note Trainer</title>
 <style>
-  :root { --bg:#faf7f2; --ink:#1d1b19; --mute:#7a746b; --card:#fff; --line:#e4ddd0; --ok:#2e8b57; --accent:#8a4b1f; }
+  :root { --bg:#faf7f2; --ink:#1d1b19; --mute:#7a746b; --card:#fff; --line:#e4ddd0; --ok:#2e8b57; --bad:#c0392b; --accent:#8a4b1f; --chip:#f1ebe1; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#181614; --ink:#f0ebe3; --mute:#9c958a; --card:#23201d; --line:#3a352f; --ok:#4cc38a; --accent:#e0a064; }
+    :root { --bg:#181614; --ink:#f0ebe3; --mute:#9c958a; --card:#23201d; --line:#3a352f; --ok:#4cc38a; --bad:#ef6b5b; --accent:#e0a064; --chip:#2e2a26; }
   }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
   main { max-width:640px; margin:0 auto; padding:20px 16px 40px; }
   h1 { font-size:20px; margin:0 0 4px; }
-  .sub { color:var(--mute); font-size:14px; margin:0 0 16px; }
+  .sub { color:var(--mute); font-size:14px; margin:0 0 14px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
   svg { width:100%; height:auto; display:block; }
   .staff line { stroke:var(--ink); stroke-width:1.4; }
-  .note { fill:var(--ink); transition:fill .15s; }
-  .note.good { fill:var(--ok); }
-  .clef { fill:var(--ink); font-family:"Noto Music","Apple Symbols","Segoe UI Symbol","Bravura Text",serif; }
-  button { font:inherit; font-weight:600; padding:12px 20px; border-radius:10px; border:0; background:var(--accent); color:#fff; cursor:pointer; }
+  .ledger { stroke:var(--ink); stroke-width:1.4; }
+  .nh { fill:var(--ink); transition:fill .15s; }
+  .good .nh { fill:var(--ok); } .good .ledger { stroke:var(--ok); }
+  .bad .nh { fill:var(--bad); } .bad .ledger { stroke:var(--bad); }
+  .off { opacity:.18; }
+  .pick { cursor:pointer; }
+  .pick text { fill:var(--mute); font-size:13px; text-anchor:middle; }
+  .pick:not(.off) text { fill:var(--ink); font-weight:700; }
+  .clef { fill:var(--ink); }
+  button { font:inherit; font-weight:600; padding:12px 18px; border-radius:10px; border:0; background:var(--accent); color:#fff; cursor:pointer; }
   button.alt { background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:500; }
-  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-  .big { font-size:30px; font-weight:700; min-width:3ch; }
+  button.small { padding:6px 12px; font-size:14px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .tabs { display:flex; gap:6px; margin-bottom:14px; }
+  .tabs button { flex:1; background:var(--chip); color:var(--ink); font-weight:500; padding:10px 6px; font-size:15px; }
+  .tabs button.on { background:var(--accent); color:#fff; font-weight:600; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .between { justify-content:space-between; }
+  select, input[type=text], input[type=number] { font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  select { flex:1; min-width:0; }
+  .big { font-size:30px; font-weight:700; min-width:3ch; font-variant-numeric:tabular-nums; }
+  .huge { font-size:44px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1; }
   .meter { height:10px; background:var(--line); border-radius:6px; overflow:hidden; flex:1; min-width:120px; }
   .meter > div { height:100%; width:0; background:var(--accent); transition:width .05s; }
-  .meter .gate { background:none; }
   .stat { color:var(--mute); font-size:14px; }
   label { font-size:14px; color:var(--mute); }
   input[type=range] { width:100%; }
   .heard { font-size:15px; color:var(--mute); min-height:1.4em; }
-  #msg { color:var(--accent); font-size:14px; min-height:1.4em; }
+  #fb { min-height:1.5em; font-weight:600; }
+  #fb.good { color:var(--ok); } #fb.bad { color:var(--bad); }
+  .dots { display:flex; gap:10px; }
+  .dots span { width:18px; height:18px; border-radius:50%; background:var(--line); }
+  .dots span.on { background:var(--accent); }
+  .dots span.last.on { background:var(--bad); }
+  [hidden] { display:none !important; }
+  hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
 </style>
 </head>
 <body>
 <main>
   <h1>Classical Note Trainer</h1>
-  <p class="sub">Play the note shown, on your guitar. Open G string up to the 3rd fret on the top E string. Written an octave above where it sounds, as classical guitar music is.</p>
+  <p class="sub">Play the note shown on your guitar. Written an octave above where it sounds, as classical guitar music is.</p>
+
+  <nav class="tabs">
+    <button data-mode="practice" class="on">Practice</button>
+    <button data-mode="timed">Timed levels</button>
+    <button data-mode="ladder">Tempo Ladder</button>
+  </nav>
 
   <div class="card">
-    <svg id="staff" viewBox="0 0 400 190" aria-label="Treble clef with a note to play"></svg>
-    <div class="row" style="justify-content:space-between;margin-top:6px">
-      <span class="big" id="name">&nbsp;</span>
-      <span class="stat">Score <b id="score">0</b> &middot; streak <b id="streak">0</b></span>
+    <div class="row">
+      <label for="levelSel">Level</label>
+      <select id="levelSel"></select>
+      <button id="editBtn" class="alt small">Edit levels</button>
+    </div>
+
+    <div id="editor" hidden>
+      <hr>
+      <div class="row">
+        <label for="lvName">Name</label>
+        <input id="lvName" type="text" style="flex:1;min-width:0" autocomplete="off" spellcheck="false">
+      </div>
+      <p class="stat" style="margin:10px 0 4px">Tap the notes this level should test.</p>
+      <svg id="picker" viewBox="0 0 580 240" aria-label="Notes to include"></svg>
+      <div class="row" style="margin:6px 0 12px">
+        <button class="alt small" data-q="all">All</button>
+        <button class="alt small" data-q="none">None</button>
+        <button class="alt small" data-q="top">Strings 1–3</button>
+        <button class="alt small" data-q="bass">Strings 4–6</button>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <label for="lvCount">Notes in a timed run</label>
+        <input id="lvCount" type="number" min="3" max="60" style="width:80px">
+      </div>
+      <div class="row">
+        <button id="lvNew" class="alt small">＋ New level</button>
+        <button id="lvDel" class="alt small">Delete this level</button>
+        <button id="lvDone" class="small">Done</button>
+      </div>
+      <p class="stat" style="margin-bottom:0">Changes save as you go. Changing a level's notes clears its records.</p>
     </div>
   </div>
 
   <div class="card">
-    <div class="row" style="margin-bottom:12px">
-      <button id="start">Start listening</button>
-      <button id="skip" class="alt">Skip note</button>
+    <svg id="staff" viewBox="0 0 400 240" aria-label="Treble clef with the note to play"></svg>
+    <div class="row between" style="margin-top:4px">
+      <span id="fb">&nbsp;</span>
+      <span class="stat" id="where"></span>
     </div>
-    <div id="msg">Press Start and allow the microphone.</div>
-    <div class="row" style="margin:10px 0 4px">
+  </div>
+
+  <!-- Practice -->
+  <div class="card mode" id="m-practice">
+    <div class="row between">
+      <div class="row">
+        <button id="pStart">Start</button>
+        <button id="pSkip" class="alt">Skip note</button>
+      </div>
+      <span class="stat">Score <b id="pScore">0</b> · streak <b id="pStreak">0</b></span>
+    </div>
+    <p class="stat" style="margin-bottom:0">A wrong note ends your streak.</p>
+  </div>
+
+  <!-- Timed -->
+  <div class="card mode" id="m-timed" hidden>
+    <div class="row between">
+      <div class="huge" id="tTime">0.0s</div>
+      <div style="text-align:right">
+        <div class="stat">Note <b id="tProg">0 / 0</b></div>
+        <div class="stat">Wrong notes <b id="tPen">0</b> (+5s each)</div>
+      </div>
+    </div>
+    <div class="row between" style="margin-top:10px">
+      <button id="tStart">Start run</button>
+      <span class="stat">Best time: <b id="tBest">–</b></span>
+    </div>
+  </div>
+
+  <!-- Tempo Ladder -->
+  <div class="card mode" id="m-ladder" hidden>
+    <p class="stat" style="margin-top:0">Play each note within 4 beats. Every note you get speeds the metronome up by 2 bpm, starting at 80. How high can you climb?</p>
+    <div class="row between">
+      <div><span class="huge" id="lBpm">80</span> <span class="stat">bpm</span></div>
+      <div class="dots" id="lDots"><span></span><span></span><span></span><span class="last"></span></div>
+    </div>
+    <div class="row between" style="margin-top:10px">
+      <button id="lStart">Start climbing</button>
+      <span class="stat">Notes <b id="lScore">0</b></span>
+    </div>
+    <p class="stat" style="margin-bottom:0">Best: <b id="lBest">–</b></p>
+  </div>
+
+  <div class="card">
+    <div id="msg" class="stat" style="margin-bottom:6px">Press Start and allow the microphone.</div>
+    <div class="row" style="margin:6px 0 4px">
       <span class="stat" style="width:70px">Volume</span>
       <div class="meter"><div id="level"></div></div>
     </div>
     <label for="gate">Sensitivity (move right if it isn't hearing you)</label>
     <input id="gate" type="range" min="0" max="100" value="70">
-    <div class="heard" id="heard">Heard: &ndash;</div>
-    <label style="display:block;margin-top:8px"><input id="anyoct" type="checkbox"> Accept the right note in any octave (for testing)</label>
+    <div class="heard" id="heard">Heard: –</div>
+    <label style="display:block;margin-top:8px"><input id="anyoct" type="checkbox"> Accept the right note in any octave</label>
   </div>
 </main>
 
 <script>
+const $ = id => document.getElementById(id);
+
 // ---------- Notes ----------
-// Sounding range: open G string (G3) up to 3rd fret on the high E string (G4).
-// Classical guitar is written an octave above it sounds, so the staff shows G4..G5.
+// First position, natural notes, low E to G on the top string.
+// Classical guitar is written an octave above it sounds: writtenOct = soundOct + 1.
 const LETTERS = ['C','D','E','F','G','A','B'];
-const SEMI = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
-const TARGETS = [];
-(function () {
-  let letter = 4, oct = 3;                 // G3
-  for (;;) {
-    const L = LETTERS[letter];
-    TARGETS.push({
-      letter: L,
-      soundOct: oct,
-      writtenOct: oct + 1,
-      midi: 12 * (oct + 1) + SEMI[L],      // sounding pitch (C4 = 60)
-    });
-    if (L === 'G' && oct === 4) break;
-    letter++; if (letter > 6) { letter = 0; oct++; }
-  }
-})();
-const midiToHz = m => 440 * Math.pow(2, (m - 69) / 12);
-const NAMES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const SEMI = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+const RAW = [['E',2,6,0],['F',2,6,1],['G',2,6,3],['A',2,5,0],['B',2,5,2],['C',3,5,3],
+             ['D',3,4,0],['E',3,4,2],['F',3,4,3],['G',3,3,0],['A',3,3,2],['B',3,2,0],
+             ['C',4,2,1],['D',4,2,3],['E',4,1,0],['F',4,1,1],['G',4,1,3]];
+const NOTES = RAW.map(([L, o, s, f]) => ({ id: L + o, letter: L, writtenOct: o + 1, midi: 12 * (o + 1) + SEMI[L], string: s, fret: f }));
+const BY_ID = Object.fromEntries(NOTES.map(n => [n.id, n]));
+const ORD = ['', '1st', '2nd', '3rd', '4th', '5th', '6th'];
+const where = n => n.fret ? `${ORD[n.string]} string, fret ${n.fret}` : `open ${ORD[n.string]} string`;
+const PC = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const pcName = m => PC[((m % 12) + 12) % 12];
 const hzToMidi = f => 69 + 12 * Math.log2(f / 440);
 
+// ---------- Levels & records (saved on this device) ----------
+const DEFAULT_LEVELS = [
+  { id: 'g-to-g', name: 'Open G to top G', notes: ['G3','A3','B3','C4','D4','E4','F4','G4'], count: 10 },
+  { id: 'bass',   name: 'Bass strings (6th to 4th)', notes: ['E2','F2','G2','A2','B2','C3','D3','E3','F3'], count: 10 },
+  { id: 'all',    name: 'All first position', notes: NOTES.map(n => n.id), count: 20 },
+];
+const KEY = 'classical-note-trainer-v2';
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.levels && s.levels.length) return s; } catch (e) {}
+  return { levels: DEFAULT_LEVELS.map(l => ({ ...l, notes: [...l.notes] })), sel: 'g-to-g', best: {}, ladder: {} };
+}
+const store = load();
+function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {} }
+const level = () => store.levels.find(l => l.id === store.sel) || store.levels[0];
+
 // ---------- Staff drawing ----------
-const svg = document.getElementById('staff');
 const NS = 'http://www.w3.org/2000/svg';
-const TOP = 50, GAP = 18;                  // top line y, spacing between lines
-const STEP = GAP / 2;
-const el = (n, a, t) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (t) e.textContent = t; return e; };
-
-function drawStaff() {
-  svg.innerHTML = '';
-  const g = el('g', { class: 'staff' });
-  for (let i = 0; i < 5; i++) g.appendChild(el('line', { x1: 20, x2: 380, y1: TOP + i * GAP, y2: TOP + i * GAP }));
-  svg.appendChild(g);
-  // treble clef, with the small 8 beneath that marks the classical guitar octave
-  svg.appendChild(el('text', { class: 'clef', x: 24, y: TOP + 4 * GAP + 16, 'font-size': 112 }, '\u{1D11E}'));
-  svg.appendChild(el('text', { class: 'clef', x: 48, y: TOP + 4 * GAP + 42, 'font-size': 18, 'font-family': 'serif', 'font-weight': 700, 'text-anchor': 'middle' }, '8'));
-}
-// y of a written note: bottom line is E4
+const GAP = 18, STEP = GAP / 2;
+const el = (n, a, t) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (t != null) e.textContent = t; return e; };
 const stepsFromC = (L, o) => o * 7 + LETTERS.indexOf(L);
-const BOTTOM = stepsFromC('E', 4);
-const noteY = (L, o) => TOP + 4 * GAP - (stepsFromC(L, o) - BOTTOM) * STEP;
+const E4 = stepsFromC('E', 4);                       // bottom line of the treble staff
 
-let noteEl = null;
-function drawNote(t) {
-  if (noteEl) noteEl.remove();
-  const y = noteY(t.letter, t.writtenOct);
+// The clef is a font glyph, and every device draws it from a different font at a
+// different size. So measure its actual ink on a canvas and fit it to the staff:
+// a treble clef reaches ~4.4 spaces above the G line and ~2.6 below it, with its
+// curl round the G line (standard engraving proportions, SMuFL gClef).
+const CLEF = '\u{1D11E}';
+const CLEF_FONT = '"Noto Music","Apple Symbols","Segoe UI Symbol","Bravura Text","Noto Sans Symbols 2",serif';
+let clefInk;
+function measureClef() {
+  if (clefInk !== undefined) return clefInk;
+  clefInk = null;
+  try {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = '100px ' + CLEF_FONT;
+    const m = c.measureText(CLEF);
+    if (m.actualBoundingBoxAscent > 0 && m.actualBoundingBoxDescent > 0)
+      clefInk = { asc: m.actualBoundingBoxAscent, desc: m.actualBoundingBoxDescent,
+                  left: m.actualBoundingBoxLeft || 0, right: m.actualBoundingBoxRight || 40 };
+  } catch (e) {}
+  return clefInk;
+}
+
+function makeStaff(svgEl, top, x2) {
+  svgEl.innerHTML = '';
+  const bottom = top + 4 * GAP, gLine = top + 3 * GAP;
+  const g = el('g', { class: 'staff' });
+  for (let i = 0; i < 5; i++) g.appendChild(el('line', { x1: 14, x2, y1: top + i * GAP, y2: top + i * GAP }));
+  svgEl.appendChild(g);
+  const ink = measureClef();
+  const X = 22;
+  let cx;
+  if (ink) {
+    const k = (7.02 * GAP) / (ink.asc + ink.desc);    // px per canvas px at 100px
+    const inkTop = gLine - 4.39 * GAP;
+    svgEl.appendChild(el('text', { class: 'clef', x: X + ink.left * k, y: inkTop + ink.asc * k,
+      'font-size': 100 * k, 'font-family': CLEF_FONT }, CLEF));
+    cx = X + (ink.left + ink.right) * k / 2;
+  } else {
+    svgEl.appendChild(el('text', { class: 'clef', x: X, y: bottom + 16, 'font-size': 112, 'font-family': CLEF_FONT }, CLEF));
+    cx = X + 24;
+  }
+  // the small 8 under the clef: sounds an octave lower than written
+  svgEl.appendChild(el('text', { class: 'clef', x: cx, y: gLine + 2.63 * GAP + 17, 'font-size': 17,
+    'font-family': 'Georgia,serif', 'font-weight': 700, 'text-anchor': 'middle' }, '8'));
+  return { svg: svgEl, top, bottom };
+}
+
+function noteGlyph(st, n, x, stem = true) {
+  const off = stepsFromC(n.letter, n.writtenOct) - E4;   // 0 = bottom line, 8 = top line
+  const y = st.bottom - off * STEP;
   const g = el('g', {});
-  g.appendChild(el('ellipse', { class: 'note', cx: 250, cy: y, rx: 12, ry: 8.5, transform: `rotate(-20 250 ${y})` }));
-  // stem: up if on/below the middle line, down above it
-  const up = y >= TOP + 2 * GAP;
-  g.appendChild(el('rect', up ? { class: 'note', x: 260.5, y: y - 56, width: 2, height: 56 }
-                              : { class: 'note', x: 237.5, y: y, width: 2, height: 56 }));
-  svg.appendChild(g);
-  noteEl = g;
+  for (let d = -2; d >= off; d -= 2) g.appendChild(el('line', { class: 'ledger', x1: x - 18, x2: x + 18, y1: st.bottom - d * STEP, y2: st.bottom - d * STEP }));
+  for (let d = 10; d <= off; d += 2) g.appendChild(el('line', { class: 'ledger', x1: x - 18, x2: x + 18, y1: st.bottom - d * STEP, y2: st.bottom - d * STEP }));
+  g.appendChild(el('ellipse', { class: 'nh', cx: x, cy: y, rx: 11.5, ry: 8, transform: `rotate(-20 ${x} ${y})` }));
+  // stems go up below the middle line, down from it upwards
+  if (stem) g.appendChild(el('rect', off < 4 ? { class: 'nh', x: x + 9.5, y: y - 56, width: 2, height: 56 }
+                                   : { class: 'nh', x: x - 11.5, y: y, width: 2, height: 56 }));
+  return g;
 }
 
-// ---------- Game state ----------
-let current = null, score = 0, streak = 0, last = -1, matched = 0, advancing = false;
-const $ = id => document.getElementById(id);
-function nextNote() {
-  let i; do { i = Math.floor(Math.random() * TARGETS.length); } while (i === last);
-  last = i; current = TARGETS[i]; matched = 0; advancing = false;
-  drawNote(current);
-  $('name').innerHTML = '&nbsp;';
+const mainStaff = makeStaff($('staff'), 60, 386);
+let noteEl = null;
+function showNote(n) {
+  if (noteEl) { noteEl.remove(); noteEl = null; }
+  $('where').textContent = '';
+  if (!n) return;
+  noteEl = noteGlyph(mainStaff, n, 250);
+  mainStaff.svg.appendChild(noteEl);
 }
-function success() {
-  advancing = true; score++; streak++;
-  $('score').textContent = score; $('streak').textContent = streak;
-  noteEl.querySelectorAll('.note').forEach(n => n.classList.add('good'));
-  $('name').textContent = current.letter + ' ✓';
-  setTimeout(nextNote, 900);
+function flashNote(cls, ms) {
+  if (!noteEl) return;
+  const g = noteEl; g.classList.add(cls);
+  if (ms) setTimeout(() => g.classList.remove(cls), ms);
 }
-$('skip').onclick = () => { streak = 0; $('streak').textContent = 0; nextNote(); };
+let fbTimer;
+function fb(text, cls, ms) {
+  clearTimeout(fbTimer);
+  $('fb').textContent = text || ' '; $('fb').className = cls || '';
+  if (ms) fbTimer = setTimeout(() => { $('fb').textContent = ' '; $('fb').className = ''; }, ms);
+}
+
+// ---------- Level picker / editor ----------
+function renderLevels() {
+  const s = $('levelSel'); s.innerHTML = '';
+  for (const l of store.levels) s.add(new Option(l.name || 'Untitled', l.id));
+  s.value = level().id;
+  renderBests();
+  if (!$('editor').hidden) renderEditor();
+}
+function renderEditor() {
+  const l = level();
+  $('lvName').value = l.name; $('lvCount').value = l.count;
+  $('lvDel').disabled = store.levels.length <= 1;
+  const st = makeStaff($('picker'), 60, 572);
+  NOTES.forEach((n, i) => {
+    const x = 112 + i * 27;
+    const on = l.notes.includes(n.id);
+    const g = el('g', { class: 'pick' + (on ? '' : ' off') });
+    g.appendChild(el('rect', { x: x - 13.5, y: 0, width: 27, height: 240, fill: 'transparent' }));
+    g.appendChild(noteGlyph(st, n, x, false));
+    g.appendChild(el('text', { x, y: 232 }, n.letter));
+    const t = el('title', {}, `${n.letter} — ${where(n)}`); g.appendChild(t);
+    g.onclick = () => toggleNote(n.id);
+    st.svg.appendChild(g);
+  });
+}
+function clearRecords(id) { delete store.best[id]; delete store.ladder[id]; }
+function setNotes(ids) {
+  stopAll();
+  const l = level();
+  l.notes = NOTES.map(n => n.id).filter(id => ids.includes(id));
+  clearRecords(l.id); save(); renderEditor(); renderBests();
+}
+function toggleNote(id) {
+  const l = level();
+  setNotes(l.notes.includes(id) ? l.notes.filter(x => x !== id) : [...l.notes, id]);
+}
+document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => {
+  const q = b.dataset.q;
+  setNotes(NOTES.filter(n => q === 'all' || (q === 'top' && n.string <= 3) || (q === 'bass' && n.string >= 4)).map(n => n.id));
+});
+$('editBtn').onclick = () => { $('editor').hidden = !$('editor').hidden; $('editBtn').textContent = $('editor').hidden ? 'Edit levels' : 'Close'; if (!$('editor').hidden) renderEditor(); };
+$('lvDone').onclick = () => { $('editor').hidden = true; $('editBtn').textContent = 'Edit levels'; };
+$('levelSel').onchange = e => { stopAll(); store.sel = e.target.value; save(); renderLevels(); };
+$('lvName').oninput = e => { level().name = e.target.value; save(); $('levelSel').selectedOptions[0].textContent = e.target.value || 'Untitled'; };
+$('lvCount').onchange = e => {
+  const v = Math.max(3, Math.min(60, parseInt(e.target.value, 10) || 10));
+  e.target.value = v;
+  const l = level(); if (l.count !== v) { l.count = v; delete store.best[l.id]; save(); renderBests(); }
+};
+$('lvNew').onclick = () => {
+  stopAll();
+  const l = { id: 'l' + Date.now(), name: 'My level ' + (store.levels.length + 1), notes: [...level().notes], count: 10 };
+  store.levels.push(l); store.sel = l.id; save(); renderLevels();
+  $('lvName').focus(); $('lvName').select();
+};
+$('lvDel').onclick = () => {
+  if (store.levels.length <= 1) return;
+  const l = level();
+  if (!confirm(`Delete the level “${l.name}” and its records?`)) return;
+  stopAll();
+  store.levels = store.levels.filter(x => x.id !== l.id); clearRecords(l.id);
+  store.sel = store.levels[0].id; save(); renderLevels();
+};
+
+const fmt = s => s < 60 ? s.toFixed(1) + 's' : Math.floor(s / 60) + ':' + (s % 60).toFixed(1).padStart(4, '0');
+function renderBests() {
+  const id = level().id;
+  $('tBest').textContent = store.best[id] != null ? fmt(store.best[id]) : '–';
+  const lb = store.ladder[id];
+  $('lBest').textContent = lb ? `${lb.score} notes · fastest tempo cleared ${lb.bpm} bpm` : '–';
+  $('tProg').textContent = `0 / ${level().count}`;
+}
+function notesOrComplain() {
+  const ids = level().notes;
+  if (ids.length < 2) { fb('Pick at least 2 notes for this level (Edit levels).', 'bad'); return null; }
+  return ids;
+}
+const pickNext = (ids, lastId) => { let id; do { id = ids[Math.floor(Math.random() * ids.length)]; } while (id === lastId); return id; };
 
 // ---------- Pitch detection (McLeod normalised square difference) ----------
 // PITCH-START
 function detectPitch(buf, sr) {
   const n = buf.length, maxTau = Math.min(n >> 1, Math.floor(sr / 70)), minTau = Math.floor(sr / 700);
   const nsdf = new Float32Array(maxTau);
-  // running sum of squares for the m' term
   let sq = 0; for (let i = 0; i < n; i++) sq += buf[i] * buf[i];
   let m = 2 * sq;
   for (let tau = 0; tau < maxTau; tau++) {
@@ -156,10 +375,9 @@ function detectPitch(buf, sr) {
     nsdf[tau] = m > 0 ? 2 * acf / m : 0;
     m -= buf[tau] * buf[tau] + buf[n - 1 - tau] * buf[n - 1 - tau];
   }
-  // peaks: one per positive lobe
   const peaks = [];
   let tau = 1;
-  while (tau < maxTau - 1 && nsdf[tau] > 0) tau++;           // skip first lobe
+  while (tau < maxTau - 1 && nsdf[tau] > 0) tau++;
   while (tau < maxTau - 1) {
     while (tau < maxTau - 1 && nsdf[tau] <= 0) tau++;
     let best = -1;
@@ -178,58 +396,259 @@ function detectPitch(buf, sr) {
 }
 // PITCH-END
 
-// ---------- Microphone loop ----------
-let ctx, analyser, buf, running = false, lastRun = 0;
-$('start').onclick = async () => {
-  if (running) return;
+// ---------- Turning pitches into "played a note" events ----------
+// A note counts once it has been steady for 3 frames (~150ms) if right, 4 if wrong
+// (wrong costs something, so be surer). Each held note fires once: a ringing string
+// is one event, not one per frame. The just-played note is keyed to the same value
+// across the change of target, so its ring-on can't count as a wrong note.
+// TRACKER-START
+const seg = { key: null, frames: 0, fired: false };
+let gapFrames = 0, prev = { midi: null, t: -1e9 };
+let game = null;   // { target, active, onCorrect(), onWrong(midi) }
+function feed(midi, now, anyOct) {
+  if (midi == null) { if (++gapFrames >= 2) { seg.key = null; seg.frames = 0; seg.fired = false; } return; }
+  gapFrames = 0;
+  const T = game && game.target;
+  let correct = false;
+  if (T) { let d = midi - T.midi; if (anyOct) d = ((d % 12) + 18) % 12 - 6; correct = Math.abs(d) < 0.5; }
+  const key = correct ? T.midi : Math.round(midi);
+  if (key !== seg.key) { seg.key = key; seg.frames = 0; seg.fired = false; }
+  seg.frames++;
+  if (seg.fired || !T || !game.active) return;
+  if (correct && seg.frames >= 3) {
+    seg.fired = true; prev = { midi: T.midi, t: now };
+    game.onCorrect();
+  } else if (!correct && seg.frames >= 4) {
+    seg.fired = true;
+    if (key === prev.midi && now - prev.t < 2000) return;   // the last note still ringing
+    game.onWrong(key);
+  }
+}
+// TRACKER-END
+
+// ---------- Microphone ----------
+let actx, analyser, buf, micOn = false, lastRun = 0;
+async function ensureMic() {
+  if (micOn) { if (actx.state === 'suspended') await actx.resume(); return true; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    $('msg').textContent = 'This browser can\'t reach the microphone from here. Try Chrome or Safari, and open the page from its web address.';
-    return;
+    $('msg').textContent = 'This browser can\'t reach the microphone from here. Try Chrome or Safari.';
+    return false;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true }
-    });
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') await ctx.resume();
-    const src = ctx.createMediaStreamSource(stream);
-    analyser = ctx.createAnalyser(); analyser.fftSize = 4096;
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } });
+    if (actx.state === 'suspended') await actx.resume();
+    const src = actx.createMediaStreamSource(stream);
+    analyser = actx.createAnalyser(); analyser.fftSize = 4096;
     src.connect(analyser);
     buf = new Float32Array(analyser.fftSize);
-    running = true;
-    $('start').textContent = 'Listening…'; $('start').disabled = true;
-    $('msg').textContent = 'Play the note shown.';
-    nextNote();
+    micOn = true;
+    $('msg').textContent = 'Listening.';
     requestAnimationFrame(loop);
+    return true;
   } catch (e) {
     $('msg').textContent = 'Couldn\'t use the microphone: ' + (e.message || e.name) + '. Allow it in the browser and try again.';
+    return false;
   }
-};
+}
 
 function loop(t) {
-  if (!running) return;
   requestAnimationFrame(loop);
+  if (ladder.running) ladderTick();
+  if (timed.running) $('tTime').textContent = fmt(timedElapsed());
   if (t - lastRun < 50) return;
   lastRun = t;
   analyser.getFloatTimeDomainData(buf);
   let s = 0; for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
   const rms = Math.sqrt(s / buf.length);
   $('level').style.width = Math.min(100, Math.sqrt(rms) * 220) + '%';
-  // Sensitivity 0..100 -> gate from loud (0.02) to very quiet (0.0007)
-  const gate = 0.02 * Math.pow(0.035, $('gate').value / 100);
-  if (rms < gate) { matched = 0; $('heard').textContent = 'Heard: – (too quiet; try Sensitivity to the right)'; return; }
-  const r = detectPitch(buf, ctx.sampleRate);
-  if (!r || r.clarity < 0.8 || r.freq < 150 || r.freq > 700) { matched = 0; $('heard').textContent = 'Heard: sound, but no clear note'; return; }
-  const midi = hzToMidi(r.freq), rounded = Math.round(midi);
-  $('heard').textContent = `Heard: ${NAMES[((rounded % 12) + 12) % 12]}${Math.floor(rounded / 12) - 1}  (${r.freq.toFixed(1)} Hz)`;
-  if (advancing || !current) return;
-  let diff = midi - current.midi;
-  if ($('anyoct').checked) diff = ((diff % 12) + 18) % 12 - 6;
-  if (Math.abs(diff) < 0.5) { if (++matched >= 3) success(); } else matched = 0;
+  const gate = 0.02 * Math.pow(0.035, $('gate').value / 100);   // 0..100 -> 0.02 .. 0.0007
+  const anyOct = $('anyoct').checked;
+  if (rms < gate) { feed(null, t, anyOct); $('heard').textContent = 'Heard: – (too quiet? move Sensitivity right)'; return; }
+  const r = detectPitch(buf, actx.sampleRate);
+  if (!r || r.clarity < 0.8 || r.freq < 70 || r.freq > 700) { feed(null, t, anyOct); $('heard').textContent = 'Heard: sound, but no clear note'; return; }
+  const midi = hzToMidi(r.freq), rd = Math.round(midi);
+  $('heard').textContent = `Heard: ${pcName(rd)}${Math.floor(rd / 12) - 1} sounding (${r.freq.toFixed(1)} Hz)`;
+  feed(midi, t, anyOct);
 }
 
-drawStaff();
-current = TARGETS[0]; drawNote(TARGETS[Math.floor(Math.random() * TARGETS.length)]);
+// ---------- Modes ----------
+function stopAll() {
+  if (ladder.running) ladderStop();
+  timed.running = false; $('tStart').textContent = 'Start run';
+  $('pStart').textContent = 'Start';
+  game = null;
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  stopAll(); showNote(null); fb('');
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.mode').forEach(m => m.hidden = m.id !== 'm-' + b.dataset.mode);
+});
+
+// Practice: free play; a wrong note ends the streak
+const practice = { score: 0, streak: 0 };
+function practiceNext() {
+  const ids = level().notes;
+  const n = BY_ID[pickNext(ids, game.target && game.target.id)];
+  game.target = n; game.active = true; showNote(n);
+}
+$('pStart').onclick = async () => {
+  if (!await ensureMic()) return;
+  const ids = notesOrComplain(); if (!ids) return;
+  stopAll();
+  $('pStart').textContent = 'Restart';
+  practice.score = 0; practice.streak = 0; $('pScore').textContent = 0; $('pStreak').textContent = 0;
+  game = {
+    target: null, active: false,
+    onCorrect() {
+      game.active = false;
+      practice.score++; practice.streak++;
+      $('pScore').textContent = practice.score; $('pStreak').textContent = practice.streak;
+      flashNote('good'); fb(game.target.letter + ' ✓', 'good');
+      $('where').textContent = where(game.target);
+      const g = game;
+      setTimeout(() => { if (game === g) { fb(''); practiceNext(); } }, 800);
+    },
+    onWrong(m) {
+      practice.streak = 0; $('pStreak').textContent = 0;
+      flashNote('bad', 500); fb(`✗ that was ${pcName(m)} — streak reset`, 'bad', 1500);
+    },
+  };
+  fb(''); practiceNext();
+};
+$('pSkip').onclick = () => {
+  if (!game) return;
+  practice.streak = 0; $('pStreak').textContent = 0; fb(''); practiceNext();
+};
+
+// Timed levels: play every note of the run as fast as you can, +5s per wrong note
+const timed = { running: false, t0: 0, pen: 0, i: 0, seq: [] };
+const timedElapsed = () => (performance.now() - timed.t0) / 1000 + timed.pen * 5;
+$('tStart').onclick = async () => {
+  if (timed.running) { stopAll(); fb('Run stopped.'); showNote(null); return; }
+  if (!await ensureMic()) return;
+  const ids = notesOrComplain(); if (!ids) return;
+  stopAll();
+  const l = level();
+  timed.seq = []; for (let i = 0; i < l.count; i++) timed.seq.push(pickNext(ids, timed.seq[i - 1]));
+  timed.i = 0; timed.pen = 0; timed.t0 = performance.now(); timed.running = true;
+  $('tStart').textContent = 'Stop'; $('tPen').textContent = 0; $('tProg').textContent = `1 / ${l.count}`;
+  fb('Go!', '', 800);
+  game = {
+    target: BY_ID[timed.seq[0]], active: true,
+    onCorrect() {
+      timed.i++;
+      if (timed.i >= timed.seq.length) return timedFinish();
+      game.target = BY_ID[timed.seq[timed.i]];
+      showNote(game.target);
+      $('tProg').textContent = `${timed.i + 1} / ${timed.seq.length}`;
+      fb('✓', 'good', 400);
+    },
+    onWrong(m) {
+      timed.pen++; $('tPen').textContent = timed.pen;
+      flashNote('bad', 500); fb(`✗ that was ${pcName(m)} · +5s`, 'bad', 1200);
+    },
+  };
+  showNote(game.target);
+};
+function timedFinish() {
+  const total = timedElapsed();
+  const id = level().id;
+  timed.running = false; game = null; $('tStart').textContent = 'Start run';
+  $('tTime').textContent = fmt(total);
+  showNote(null);
+  const old = store.best[id];
+  if (old == null || total < old) {
+    store.best[id] = total; save(); renderBests();
+    fb(`Finished in ${fmt(total)} — new best!`, 'good');
+  } else {
+    fb(`Finished in ${fmt(total)}. Best is ${fmt(old)}.`);
+  }
+  $('tProg').textContent = `${timed.seq.length} / ${timed.seq.length}`;
+}
+
+// Tempo Ladder: each note within 4 beats; +2 bpm per note from 80
+const LADDER_START = 80, LADDER_STEP = 2, BEATS = 4;
+const GRACE = 0.25;   // s: the pitch detector needs ~150-250ms to be sure of a note
+const ladder = { running: false, bpm: LADDER_START, score: 0, next: 0, queue: [], countIn: 0, pendingStart: false, t0: 0, interval: 0, beat: 0, timer: null };
+function click(time, accent) {
+  // high square-wave tick: well above the guitar's range, so the detector ignores it
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = 'square'; o.frequency.value = accent ? 2400 : 1700;
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.exponentialRampToValueAtTime(accent ? 0.35 : 0.2, time + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.04);
+  o.connect(g); g.connect(actx.destination);
+  o.start(time); o.stop(time + 0.05);
+}
+function ladderSchedule() {
+  while (ladder.next < actx.currentTime + 0.12) {
+    let kind = 'beat';
+    if (ladder.countIn > 0) { kind = 'count'; if (--ladder.countIn === 0) ladder.pendingStart = true; }
+    else if (ladder.pendingStart) { kind = 'start'; ladder.pendingStart = false; }
+    click(ladder.next, kind === 'start');
+    ladder.queue.push({ time: ladder.next, kind, bpm: ladder.bpm });
+    ladder.next += 60 / ladder.bpm;
+  }
+}
+function dots(n) { [...$('lDots').children].forEach((d, i) => d.classList.toggle('on', i < n)); }
+let countN = 0;
+function ladderTick() {
+  const now = actx.currentTime;
+  while (ladder.queue.length && ladder.queue[0].time <= now) {
+    const b = ladder.queue.shift();
+    if (b.kind === 'count') { countN++; dots(countN); fb(countN < 4 ? `Get ready… ${countN}` : 'Go!'); }
+    else if (b.kind === 'start') {
+      const ids = level().notes;
+      game.target = BY_ID[pickNext(ids, game.target && game.target.id)];
+      game.active = true;
+      showNote(game.target);
+      ladder.t0 = b.time; ladder.interval = 60 / b.bpm; ladder.beat = 1; dots(1);
+      $('lBpm').textContent = b.bpm;
+      fb('');
+    } else if (game && game.active) { ladder.beat = Math.min(BEATS, ladder.beat + 1); dots(ladder.beat); }
+  }
+  if (game && game.active && now > ladder.t0 + BEATS * ladder.interval + GRACE) ladderOver();
+}
+$('lStart').onclick = async () => {
+  if (ladder.running) { stopAll(); fb('Stopped.'); showNote(null); return; }
+  if (!await ensureMic()) return;
+  if (!notesOrComplain()) return;
+  stopAll();
+  Object.assign(ladder, { running: true, bpm: LADDER_START, score: 0, queue: [], countIn: 4, pendingStart: false, next: actx.currentTime + 0.2 });
+  countN = 0; dots(0);
+  $('lBpm').textContent = LADDER_START; $('lScore').textContent = 0; $('lStart').textContent = 'Stop';
+  showNote(null);
+  game = {
+    target: null, active: false,
+    onCorrect() {
+      game.active = false;
+      ladder.score++; $('lScore').textContent = ladder.score;
+      flashNote('good'); fb(game.target.letter + ' ✓', 'good');
+      ladder.bpm += LADDER_STEP; ladder.pendingStart = true;   // next note on the next beat, faster
+    },
+    onWrong(m) { flashNote('bad', 400); fb(`✗ that was ${pcName(m)}`, 'bad', 900); },
+  };
+  ladder.timer = setInterval(ladderSchedule, 25);
+  ladderSchedule();
+};
+function ladderStop() {
+  clearInterval(ladder.timer); ladder.running = false; ladder.queue = [];
+  $('lStart').textContent = 'Start climbing';
+}
+function ladderOver() {
+  const target = game.target;
+  ladderStop(); game = null;
+  flashNote('bad');
+  $('where').textContent = `It was ${target.letter}: ${where(target)}`;
+  const score = ladder.score, cleared = score ? LADDER_START + LADDER_STEP * (score - 1) : 0;
+  const id = level().id, old = store.ladder[id];
+  let best = false;
+  if (score > 0 && (!old || score > old.score)) { store.ladder[id] = { score, bpm: Math.max(cleared, old ? old.bpm : 0) }; best = true; save(); renderBests(); }
+  fb(score ? `Out of time! ${score} notes, cleared ${cleared} bpm${best ? ' — new best!' : ''}` : 'Out of time! Try again.', best ? 'good' : 'bad');
+}
+
+renderLevels();
 </script>
 </body>
 </html>
