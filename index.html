@@ -193,7 +193,18 @@ function load() {
   return { levels: DEFAULT_LEVELS.map(l => ({ ...l, notes: [...l.notes] })), sel: 'g-to-g', best: {}, ladder: {} };
 }
 const store = load();
-function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {} }
+// A task set by a link (?v=1&level=bass) picks the level for this visit only.
+// While the student stays on it, their own saved choice is kept as it was.
+const savedSel = store.sel;
+let taskSel = null;
+try {
+  const want = new URLSearchParams(location.search).get('level');
+  if (want && store.levels.some(l => l.id === want)) { store.sel = want; taskSel = want; }
+} catch (e) {}
+function save() {
+  const out = taskSel && store.sel === taskSel ? { ...store, sel: savedSel } : store;
+  try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) {}
+}
 const level = () => store.levels.find(l => l.id === store.sel) || store.levels[0];
 
 // ---------- Staff drawing ----------
